@@ -21,7 +21,7 @@ HEADERS = {
     "Accept-Encoding": None,
 }
 APP_VERSION = "5.100.1-a00ab03870075931f7b7df1e50eec1e31332ab4d"
-BOOT_URL = "https://boot.pluto.tv/v4/start?appName=web&appVersion={app_version}&deviceVersion={device_version}&deviceModel={device_model}&deviceMake={device_make}&deviceType={device_type}&clientID={client_id}&clientModelNumber={client_model_number}&channelID={channel_id}&seriesIDs={item_id}&serverSideAds=false&clientTime={client_time}"
+BOOT_URL = "https://boot.pluto.tv/v4/start?appName={app_name}&appVersion={app_version}&deviceVersion={device_version}&deviceModel={device_model}&deviceMake={device_make}&deviceType={device_type}&clientID={client_id}&clientModelNumber={client_model_number}&channelID={channel_id}&seriesIDs={item_id}&serverSideAds=false&clientTime={client_time}"
 STITCHER_URL = "https://service-stitcher.clusters.pluto.tv{path}?{stitcher_params}"
 SEASONS_URL = "https://service-vod.clusters.pluto.tv/v4/vod/series/{series_id}/seasons?offset=1000&page=1"
 ITEMS_URL = "https://service-vod.clusters.pluto.tv/v4/vod/items?ids={item_id}"
