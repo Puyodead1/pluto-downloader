@@ -192,11 +192,11 @@ def download(url, file_name, season_dir):
         print("Download Complete")
     os.chdir(home_dir)
     # remove the temporary playlist file
-    # if temp_playlist_path.exists():
-    #     try:
-    #         temp_playlist_path.unlink()
-    #     except Exception as e:
-    #         print(f"Error removing temporary playlist file: {e}")
+    if temp_playlist_path.exists():
+        try:
+            temp_playlist_path.unlink()
+        except Exception as e:
+            print(f"Error removing temporary playlist file: {e}")
 
 
 def check_for_aria():
