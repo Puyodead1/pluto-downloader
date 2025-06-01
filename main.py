@@ -273,8 +273,6 @@ if __name__ == "__main__":
                     print("No suitable best playlist found, skipping episode.")
                     continue
                 download(best_playlist_url, episode_filename, season_dir)
-                break
-            break
     elif item_type == "movie":
         movie_name = item.get("name")
         if not os.path.isdir(download_dir):
