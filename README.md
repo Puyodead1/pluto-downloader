@@ -11,9 +11,7 @@
 # NOTE
 
 This program is WIP, the code is provided as-is and I am not held resposible for any legal issues resulting from the use of this program.
+
 # License
 
 All code is licensed under the MIT license
-
-# Credits
-this is a fork of my Udemy-downloader and inherits all credits: https://github.com/Puyodead1/udemy-downloader

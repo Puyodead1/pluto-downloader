@@ -1,19 +1,13 @@
+import json
 import os
 import requests
-import json
-import glob
 import argparse
 import sys
-import re
 import time
-import asyncio
-import json
-from tqdm import tqdm
 from requests.exceptions import ConnectionError as conn_error
-from sanitize import sanitize, slugify, SLUG_OK
-from datetime import datetime
+import datetime
 import subprocess
-import yt_dlp
+from sanitize_filename import sanitize
 
 home_dir = os.getcwd()
 download_dir = os.path.join(os.getcwd(), "out_dir")
@@ -27,18 +21,19 @@ HEADERS = {
     "Accept-Encoding": None,
 }
 APP_VERSION = "5.100.1-a00ab03870075931f7b7df1e50eec1e31332ab4d"
-BOOT_URL = "https://boot.pluto.tv/v4/start?appName={app_name}&appVersion={app_version}&deviceVersion={device_version}&deviceModel={device_model}&deviceMake={device_make}&deviceType={device_type}&clientID={client_id}&clientModelNumber={client_model_number}&channelID={channel_id}&serverSideAds=false&clientTime={client_time}"
+BOOT_URL = "https://boot.pluto.tv/v4/start?appName=web&appVersion={app_version}&deviceVersion={device_version}&deviceModel={device_model}&deviceMake={device_make}&deviceType={device_type}&clientID={client_id}&clientModelNumber={client_model_number}&channelID={channel_id}&seriesIDs={item_id}&serverSideAds=false&clientTime={client_time}"
 STITCHER_URL = "https://service-stitcher.clusters.pluto.tv{path}?{stitcher_params}"
 SEASONS_URL = "https://service-vod.clusters.pluto.tv/v4/vod/series/{series_id}/seasons?offset=1000&page=1"
+ITEMS_URL = "https://service-vod.clusters.pluto.tv/v4/vod/items?ids={item_id}"
 
 
 class Pluto:
-    def __init__(self, client_id, channel_id, series_id):
+    def __init__(self, client_id, channel_id, item_id):
         self.session = Session()
         self.stitcher_params = None
         self.client_id = client_id
         self.channel_id = channel_id
-        self.series_id = series_id
+        self.item_id = item_id
 
     def set_authdata(self, auth_data):
         session_token = auth_data.get("sessionToken")
@@ -49,9 +44,9 @@ class Pluto:
 
     def fetch_authdata(self):
         print("Fetching boot data...")
-        client_time = datetime.utcnow().isoformat() + "Z"
+        client_time = datetime.datetime.now(datetime.UTC)
         url = BOOT_URL.format(app_name="web", app_version=APP_VERSION, device_version="89.0.0", device_model="web", device_make="firefox",
-                              device_type="web", client_id=self.client_id, client_model_number="1.0.0", channel_id=self.channel_id, client_time=client_time)
+                              device_type="web", client_id=self.client_id, client_model_number="1.0.0", channel_id=self.channel_id, client_time=client_time, item_id=self.item_id)
         try:
             resp = self.session._get(url)
         except conn_error as error:
@@ -62,11 +57,23 @@ class Pluto:
             print("Boot data received")
             return resp.json()
 
+    def fetch_items(self):
+        print("Fetching items...")
+        url = ITEMS_URL.format(item_id=self.item_id)
+        try:
+            resp = self.session._get(url)
+        except conn_error as error:
+            print(f"Pluto Says: Connection error, {error}")
+            time.sleep(0.8)
+            sys.exit(0)
+        else:
+            print("Items received")
+            return resp.json()[0]
+
     def fetch_seasons(self):
         print("Fetching seasons...")
-        client_time = datetime.utcnow().isoformat() + "Z"
         url = SEASONS_URL.format(
-            series_id=self.series_id)
+            series_id=self.item_id)
         try:
             resp = self.session._get(url)
         except conn_error as error:
@@ -76,6 +83,16 @@ class Pluto:
         else:
             print("Seasons received")
             return resp.json()
+
+    def make_stitcher_url(self, url_path):
+        # if not self.stitcher_url:
+        #     raise Exception("Stitcher URL is not set. Fetch auth data first.")
+        # url = f"{self.stitcher_url}/v2{url_path}?{self.stitcher_params}&jwt={self.session_token}&masterJWTPassthrough=true"
+        # return url
+        return STITCHER_URL.format(
+            path=url_path,
+            stitcher_params=self.stitcher_params
+        )
 
 
 class Session(object):
@@ -112,14 +129,13 @@ if not os.path.exists(download_dir):
     os.makedirs(download_dir)
 
 
-def download(url, output_path, file_name, season_dir):
+def download(url, file_name, season_dir):
     os.chdir(season_dir)
-    print("Downloading Episode...")
     ret_code = subprocess.Popen([
-        "yt-dlp", "--force-generic-extractor", "--downloader",
+        "yt-dlp", "--force-generic-extractor", "-f", "best", "--downloader",
         "aria2c", "-o", f"{file_name}.%(ext)s", f"{url}"
     ]).wait()
-    print("Episode Downloaded")
+    print("Download Complete")
 
     print("Return code: " + str(ret_code))
     if ret_code != 0:
@@ -173,40 +189,53 @@ if __name__ == "__main__":
     #     access_token = os.getenv("UDEMY_BEARER")
 
     pluto = Pluto(client_id=args.client_id,
-                  channel_id="5a66795ef91fef2c7031c599", series_id=args.item_id)
+                  channel_id="5a66795ef91fef2c7031c599", item_id=args.item_id)
 
     authdata = pluto.fetch_authdata()
     pluto.set_authdata(authdata)
 
-    details = pluto.fetch_seasons()
-    series_name = details.get("name")
-    slug = details.get("slug")
-    series_dir = os.path.join(download_dir, slug)
-    if not os.path.isdir(series_dir):
-        os.mkdir(series_dir)
+    item = pluto.fetch_items()
+    item_type = item.get("type")
 
-    seasons = details.get("seasons")
+    if item_type == "series":
+        print("Fetching series info...")
+        details = pluto.fetch_seasons()
+        series_name = details.get("name")
+        slug = details.get("slug")
+        series_dir = os.path.join(download_dir, slug)
+        if not os.path.isdir(series_dir):
+            os.mkdir(series_dir)
 
-    for season in seasons:
-        season_number = season.get("number")
-        season_dir = os.path.join(series_dir, str(season_number))
-        if not os.path.isdir(season_dir):
-            os.mkdir(season_dir)
+        seasons = details.get("seasons")
+        print(f"Found {len(seasons)} seasons for series '{series_name}'")
 
-        episodes = season.get("episodes")
+        for season in seasons:
+            season_number = season.get("number")
+            season_dir = os.path.join(series_dir, f"S{season_number:02d}")
+            if not os.path.isdir(season_dir):
+                os.mkdir(season_dir)
 
-        for episode in episodes:
-            episode_name = '.'.join(episode.get("name").split(" ")[1:])
-            # strip the season number from the front
-            episode_number = str(episode.get("number"))[2:]
-            episode_filename = series_name + ".S" + str(
-                season_number) + ".E" + str(episode_number) + "." + episode_name
-            episode_path = os.path.join(season_dir, episode_filename + ".mp4")
-            stitched = episode.get("stitched").get("path")
-            url = STITCHER_URL.format(
-                path=stitched, stitcher_params=pluto.stitcher_params)
-            if os.path.isfile(episode_path):
-                print("Episode " + episode_name +
-                      " is already downloaded, skipping...")
-                continue
-            download(url, episode_path, episode_filename, season_dir)
+            episodes = season.get("episodes")
+
+            for episode in episodes:
+                print(f"Processing episode {episode.get('name')} ({episodes.index(episode) + 1}/{len(episodes)})")
+                episode_name = episode.get("name")
+                episode_number = episode.get("number")
+                episode_filename = sanitize(f"{series_name}.S{season_number:02d}.E{episode_number:02d}.{episode_name}").replace(" ", ".")
+                print(episode_filename)
+                episode_path = os.path.join(season_dir, episode_filename)
+                url_path = episode.get("stitched").get("path")
+                url = pluto.make_stitcher_url(url_path)
+                download(url, episode_filename, season_dir)
+    elif item_type == "movie":
+        movie_name = item.get("name")
+        if not os.path.isdir(download_dir):
+            os.mkdir(download_dir)
+        movie_filename = sanitize(movie_name).replace(" ", ".")
+        movie_path = os.path.join(download_dir, movie_filename)
+        url_path = item.get("stitched").get("path")
+        url = pluto.make_stitcher_url(url_path)
+        download(url, movie_filename, download_dir)
+    else:
+        print("Unknown item type, exiting...")
+        sys.exit(1)
